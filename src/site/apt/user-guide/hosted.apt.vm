@@ -1,0 +1,22 @@
+ -------
+ Configuring DevMode
+ -------
+ -------
+
+Configuring DevMode
+
+  Another aspect of gwt-maven-plugin to be familiar with it can help you configure the
+  embedded Servlet container GWT uses in DevMode. The standard
+  <<src/main/webapp>> webapp folder is used by gwt-maven-plugin to run the dev mode
+  server (Jetty).
+
+* Using Eclipse
+
+  The Google Plugin for Eclipse automatically handles launching DevMode with a
+  simple right click on your module <<gwt.xml>> file "run as > web application".
+
+* Using command line
+
+  You can use <<<mvn gwt:run>>> to launch DevMode from command line. In such case,
+  the plugin will compile your classes and prepare the exploded webapp structure.
+  DevMode is then launched on your webapp.

@@ -1,0 +1,223 @@
+ ------
+ Testing Support
+ ------
+ Nicolas de Loof
+ Olivier Lamy
+ ------
+ 2010-11-26
+
+~~ Licensed to the Apache Software Foundation (ASF) under one
+~~ or more contributor license agreements.  See the NOTICE file
+~~ distributed with this work for additional information
+~~ regarding copyright ownership.  The ASF licenses this file
+~~ to you under the Apache License, Version 2.0 (the
+~~ "License"); you may not use this file except in compliance
+~~ with the License.  You may obtain a copy of the License at
+~~
+~~   http://www.apache.org/licenses/LICENSE-2.0
+~~
+~~ Unless required by applicable law or agreed to in writing,
+~~ software distributed under the License is distributed on an
+~~ "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+~~ KIND, either express or implied.  See the License for the
+~~ specific language governing permissions and limitations
+~~ under the License.
+
+~~ NOTE: For help with the syntax of this file, see:
+~~ http://maven.apache.org/doxia/references/apt-format.html
+
+Testing GWT code with Maven
+
+  One special aspect of gwt-maven-plugin to be familiar with is that it runs its own special <<<test>>> goal
+  in order to support <<<GWTTestCase>>> and <<<GWTTestSuite>>> derived GWT tests. If you're not familiar with
+  GWT testing support you should first read the related
+  {{{https://developers.google.com/web-toolkit/articles/testing_methodologies_using_gwt}documentation}}.
+
+  We do not consider GWTTestCase to be unit test as they require the whole GWT Module to run. For this reason, the <<<test>>> goal is
+  bound by default to <<<integration-test>>> phase. But this is only our point of view and you may want to run such test during the
+  standard <<<test>>> phase, and maybe use a profile and naming convention to execute such tests on demand.
+
+  Another option is to {{{http://www.google.com/events/io/2009/sessions/GoogleWebToolkitBestPractices.html}use the MVP design pattern}}
+   to keep your code and UI components separated. In such case,
+  GWT {{{http://google-web-toolkit.googlecode.com/svn/javadoc/latest/com/google/gwt/junit/GWTMockUtilities.java}MockUtilities}}
+  will help you disable Defered Binding (that requires a full GWT stack) and use mock components.
+
+* Using Surefire
+
+  It's a long story as to why a dedicated <<<gwt:test>>> is needed, but in few words the regular Maven Surefire
+  testing plugin requires some complex setup to work fine with GWTTestSuites.
+  If you really want to do so, here is a sample configuration :
+
++---
+  <plugin>
+    <artifactId>maven-surefire-plugin</artifactId>
+    <version>2.6</version>
+    <configuration>
+      <additionalClasspathElements>
+        <additionalClasspathElement>\${project.build.sourceDirectory}</additionalClasspathElement>
+        <additionalClasspathElement>\${project.build.testSourceDirectory}</additionalClasspathElement>
+      </additionalClasspathElements>
+      <useManifestOnlyJar>false</useManifestOnlyJar>
+      <forkMode>always</forkMode>
+      <systemProperties>
+        <property>
+          <name>gwt.args</name>
+          <value>-out ${webAppDirectory}</value>
+        </property>
+      </systemProperties>
+    </configuration>
+  </plugin>
++---
+
+* Using gwt-maven-plugin <<<test>>> goal
+
+  The gwt-maven-plugin testing support is <<not>> intended to be run standalone, rather it is bound to
+  the Maven <<<integration-test>>> phase. To get <<<gwt:test>>> to run, you should include the <<<test>>>
+  goal in your plugin configuration executions, and you should invoke <<<mvn verify>>> (or <<<mvn install>>>).
+
++--
+<project>
+  [...]
+  <build>
+    <plugins>
+      [...]
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>gwt-maven-plugin</artifactId>
+        <version>${project.version}</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>test</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      [...]
+    </plugins>
+  </build>
+  [...]
+</project>
++--
+
+* Separate GwtTest tests from standard unit tests
+
+  Because you will likely want to run <<both>> Surefire and gwt-maven-plugin based tests
+  (for regular server side JUnit tests with Surefire, and for client model and controller tests with GWT)
+  you need to distinguish these tests from each other. This is done using a naming convention.
+
+  You can configure the Surefire plugin (responsible for running
+  tests during maven build) to skip the GwtTests using some naming patterns :
+
++--
+  <plugin>
+    <artifactId>maven-surefire-plugin</artifactId>
+    <version>2.6</version>
+    <configuration>
+      <excludes>
+        <exclude>**/*GwtTest.java</exclude>
+      </excludes>
+    </configuration>
+  </plugin>
++--
+
+  A simpler way to separate classic and GWT tests is to name latests <<<GwtTest"Something".java>>>.
+  As surefire looks for tests that are named <<<Something"Test".java>>> by default, they will be ignored during
+  <<<test>>> phase.
+
+  By default, the gwt-maven-plugin uses <<<GwtTest*.java>>> as inclusion pattern so that such testst will <<not>> match
+  the standard Surefire pattern. Using this convention you don't have to change your configuration.
+
+  To configure the plugin to use another naming convention, set the <<<includes>>> plugin parameter.
+
++--
+  <plugin>
+    <groupId>org.codehaus.mojo</groupId>
+    <artifactId>gwt-maven-plugin</artifactId>
+    <version>${project.version}</version>
+    <configuration>
+      <includes>**/CustomPattern*.java</includes>
+    </configuration>
+    <executions>
+      <execution>
+        <goals>
+          <goal>test</goal>
+        </goals>
+      </execution>
+    </executions>
+  </plugin>
++--
+
+* Test results output
+
+  The plugin use the standard Surefire testrunner, and contributes to execution report. If you use
+  the surefire-report-plugin, you will see the GwtTests result included in generated project site.
+
+* About GwtTestSuite
+
+  The {{{https://developers.google.com/web-toolkit/doc/latest/DevGuideTesting#DevGuideJUnitSuites}Official GWT documentation}}
+  on TestSuites suggest to grouping your GWT tests in a suite by extending GwtTestSuite. Maven will not be able to
+  run such a Suite. The snippet below is what will allow both the Eclipse Junit Runner and Maven to run the test cases.
+
++----
+  public class MyGwtTestSuite extends TestCase /*note this is TestCase and not TestSuite */
+  {
+      public static Test suite()
+      {
+          GwtTestSuite suite = new GwtTestSuite( "All Gwt Tests go in here" );
+          suite.addTestSuite( GwtTest1.class );
+          return suite;
+      }
++----
+
+* Use GWTTestSuite padawan
+
+  {{{http://google-web-toolkit.googlecode.com/svn/javadoc/latest/com/google/gwt/junit/client/GWTTestCase.html}<<<GWTTestCase>>>}}
+  derived tests are slow. This is because the JUnitShell has to load the module for each test (create the shell, hook into it, etc).
+  {{{http://google-web-toolkit.googlecode.com/svn/javadoc/latest/com/google/gwt/junit/tools/GWTTestSuite.html}<<<GWTTestSuite>>>}}
+  mitigates this by grouping all the tests that are for the same module (those that return the same value for getModuleName) together and running them via the same
+  shell instance.
+
+  This is a <<big>> time saver, and <<<GWTTestSuite>>> is easy to use, so using it is a good idea. For this reason, the default value of the
+  test inclusion pattern is <<<**/Gwt*Suite.java>>>.
+
+  We recommend to name your test suite <<<GwtTestSuite.java>>> so that the test filter picks it up, but name the actual tests
+  with a convention that Surefire will ignore by default - something that does <<not>> start with <<<GwtTest>>>, and does <<not>>
+  start <or> end with <<<Test>>>. For example <<<MyClassTestGwt.java>>>. This way, gwt-maven-plugin picks up the <<<Suite>>>, and runs it,
+  but does not also run individual tests (and Surefire does not pick it up either)
+
+* testing modes
+
+  GWTTestCase uses HTMLUnit to run your code. {{{http://htmlunit.sourceforge.net/}HTMLUnit}} doesn't provide a full
+  browser with GUI components, but is 100% Java based so it doesn't require a native process and can run in your favorite debugger.
+  Please note this is only emulation, always validate test results with a real browser.
+
+  By default, tests run in DevMode. As an option, you can run your code compiled to JavaScript instead
+  of using the dev mode bridge between Java and JavaScript, using the <<<productionMode>>> parameter. GWT Team suggest that you run your
+  tests in both modes to detect {{{https://developers.google.com/web-toolkit/doc/latest/DevGuideCodingBasicsCompatibility}differences between
+  Java and JavaScript}}. You may configure your continuous integration server with <<<-Dgwt.test.prod=true>>> system property to check this.
+
+* testing with "real" browsers
+
+  Running headless is usefull, but when it fails you'll need to see what happen and use your own browser. In such case, use the manual mode
+  using the <<<mode>>> parameter (or <<<gwt.test.mode>>> system property) to "manual". GWT will then print a URL to access from your browser.
+
+  You may also want to test your code on various browser, not just the hosted mode embeded one. You then need a remote browser available
+  for testing. See {{{https://developers.google.com/web-toolkit/doc/latest/DevGuideTestingRemoteTesting}GWT documentation}} for more
+  explanations.
+
+  Selenium mode can be used for running your test suite on real browsers using Selenium RC. Set the <<<mode>>> parameter
+  (or <<<gwt.test.mode>>> system property) to "selenium". Don't forget to configure the <<<selenium>>> parameter with the host running the Selenium RC
+  browser:
+
++---
+  <plugin>
+    <groupId>org.codehaus.mojo</groupId>
+    <artifactId>gwt-maven-plugin</artifactId>
+    <version>${project.version}</version>
+    <configuration>
+      <selenium>myhost:4444/*firefox"</selenium>
+    </configuration>
+  </plugin>
++---
+
